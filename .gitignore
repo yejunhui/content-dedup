@@ -17,6 +17,11 @@ venv/
 # Reports produced by examples
 report.json
 report.md
+demo-content/
+demo/
+demo-report.json
+state/
+media/
 
 # Build artifacts
 build/

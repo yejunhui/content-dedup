@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://github.com/yejunhui/content-dedup#readme
+    about: Read the README first, including the safety and configuration sections.
+  - name: Gitee mirror
+    url: https://gitee.com/PharaohMan/content-dedup
+    about: Gitee users can also open issues on the mirror repository.

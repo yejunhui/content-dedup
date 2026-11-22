@@ -1,13 +1,44 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "content-dedup"
 version = "0.2.0"
-description = "Multi-modal content deduplication with layered exact and perceptual fingerprints"
+description = "Local, safe multi-modal content deduplication: images, video, audio, documents, text and archives"
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "yejunhui" }]
+keywords = [
+    "deduplication",
+    "duplicate-files",
+    "duplicate-photos",
+    "image-dedup",
+    "video-dedup",
+    "audio-fingerprint",
+    "perceptual-hash",
+    "phash",
+    "simhash",
+    "nas",
+    "self-hosted",
+    "privacy",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia",
+    "Topic :: System :: Filesystems",
+    "Topic :: Utilities",
+]
 dependencies = [
     "numpy>=1.24",
     "Pillow>=10.0",
@@ -18,12 +49,22 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0"]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
 semantic = [
     "torch>=2.2",
     "open-clip-torch>=2.24",
     "sentence-transformers>=3.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/yejunhui/content-dedup"
+Repository = "https://github.com/yejunhui/content-dedup"
+Issues = "https://github.com/yejunhui/content-dedup/issues"
+Mirror = "https://gitee.com/PharaohMan/content-dedup"
+Changelog = "https://github.com/yejunhui/content-dedup/commits/main"
 
 [project.scripts]
 dedup = "dedup.cli:main"

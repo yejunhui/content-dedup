@@ -1,0 +1,64 @@
+name: Bug report
+description: Report a reproducible problem with ContentDedup
+title: "[Bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug! Please remove personal paths, secrets and
+        private media before pasting logs or screenshots.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the actual and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `dedup web --root ...`
+        2. Scan ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ContentDedup version
+      description: Output of `dedup --version`
+    validations:
+      required: true
+  - type: dropdown
+    id: interface
+    attributes:
+      label: Interface
+      options:
+        - Web UI
+        - CLI
+        - Python API
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, ffmpeg/fpcalc availability, browser if relevant.
+      placeholder: Ubuntu 24.04, Python 3.13, ffmpeg 6.1, Chrome 130
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or report excerpt
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I removed private paths, tokens and personal data from this report.
+          required: true
+        - label: I searched existing issues before opening this one.
+          required: true

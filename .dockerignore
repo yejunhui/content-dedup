@@ -1,0 +1,15 @@
+.git
+.github
+.gitignore
+.pytest_cache
+.ruff_cache
+__pycache__
+*.py[cod]
+*.egg-info
+build
+dist
+tests
+docs
+project_readme.md
+start-web.sh
+start-web.bat

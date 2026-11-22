@@ -1,0 +1,19 @@
+services:
+  content-dedup:
+    build: .
+    image: content-dedup:latest
+    container_name: content-dedup
+    ports:
+      - "8765:8765"
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      # Change this to your media directory. It must be writable if you want
+      # the web UI to move duplicates into .dedup-trash.
+      - "${MEDIA_DIR:-./media}:/data"
+      # Persistent cache, reports, thumbnails and trash state.
+      - content-dedup-state:/state
+    restart: unless-stopped
+
+volumes:
+  content-dedup-state:

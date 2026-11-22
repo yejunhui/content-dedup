@@ -1,225 +1,181 @@
-# ContentDedup
+<div align="center">
+  <img src="docs/social-preview.png" alt="ContentDedup — find duplicate content and keep the best copy" width="100%">
 
-多模态内容去重与相似识别工具。实现 `project_readme.md` 中定义的 **Adapter 抽象 + 分层流水线 + 按类型建索引**，当前交付前两层：
+  <h1>ContentDedup</h1>
 
-1. **精确哈希**：所有类型统一的 SHA-256。
-2. **感知/结构指纹**：图片 pHash/dHash、视频抽帧 pHash 序列、音频 Chromaprint、文档/文本 SimHash、压缩包内部清单哈希。
+  <p><strong>本地、安全、可回滚的多模态内容去重工具</strong></p>
+  <p>图片 · 视频 · 音频 · 文档 · 文本 · 压缩包</p>
 
-语义向量层（CLIP/文本 embedding）只预留配置与接口，本版本未实现。
+  <p>
+    <a href="https://github.com/yejunhui/content-dedup/actions/workflows/ci.yml"><img src="https://github.com/yejunhui/content-dedup/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+    <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
+    <a href="Dockerfile"><img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker ready"></a>
+    <a href="https://gitee.com/PharaohMan/content-dedup"><img src="https://img.shields.io/badge/Gitee-mirror-C71D23?logo=gitee&logoColor=white" alt="Gitee mirror"></a>
+    <a href="https://github.com/yejunhui/content-dedup/stargazers"><img src="https://img.shields.io/github/stars/yejunhui/content-dedup?style=social" alt="GitHub stars"></a>
+  </p>
 
-代码托管：[GitHub](https://github.com/yejunhui/content-dedup) · [Gitee](https://gitee.com/PharaohMan/content-dedup)
+  <p>
+    <a href="README.md">中文</a> ·
+    <a href="README.en.md">English</a> ·
+    <a href="https://github.com/yejunhui/content-dedup">GitHub</a> ·
+    <a href="https://gitee.com/PharaohMan/content-dedup">Gitee</a>
+  </p>
+</div>
 
-## 能力矩阵
+> **先预览，再清理。** ContentDedup 找出完全重复和“看起来一样”的文件，由你确认保留哪个，再把多余文件移入回收站。完全本地运行，不上传文件；不会直接永久删除。
 
-| 类型 | 精确 | 结构指纹 | 说明 |
-|---|---|---|---|
-| 图片 | ✅ | pHash 或 dHash + 颜色直方图校验 | 识别缩放、重压缩；颜色差异过大时拒绝合并 |
-| 视频 | ✅ | 定时抽帧 pHash 序列 + DTW + 颜色直方图 | 识别重编码、分辨率变化；时长差或整体色调差过大不比较 |
-| 音频 | ✅ | Chromaprint（`fpcalc`） | 缺少 `fpcalc` 时自动降级为仅精确去重 |
-| PDF / Office / ODF / EPUB | ✅ | 文本提取 + SimHash | 旧版 `.doc/.xls/.ppt` 仅精确去重 |
-| 纯文本 / 代码 / Markdown | ✅ | SimHash + shingles | 文本过短（默认 <20 tokens）仅精确去重 |
-| zip / tar / gzip 等 | ✅ | 内部 `(路径, 大小, SHA-256)` 清单 | 识别重新压缩、重新打包 |
-| 其他二进制 | ✅ | — | 只做精确去重 |
+---
 
-## 安装
+## 为什么值得用
 
-系统依赖：
+大多数去重工具只比较文件字节。ContentDedup 关心的是**内容**：
+
+- 🖼️ 同一张照片的 PNG、压缩 JPEG、缩小版，可以识别为同一组
+- 🎬 重新编码、改分辨率后的视频，可以按抽帧 pHash 序列匹配
+- 🎵 不同码率的同一首歌，可以用 Chromaprint 音频指纹匹配
+- 📄 PDF / DOCX / XLSX / PPTX / ODF / EPUB，提取文本后用 SimHash 找近似文档
+- 🗜️ 重新压缩、重新打包但内容相同的 zip/tar，可以识别
+- 🧠 完全重复仍走 SHA-256，保证精确、快速、无误差
+
+同时，它优先考虑普通用户和安全：
+
+- **Web 图形界面**：文件夹选择器、缩略图、进度条、取消、逐组审核
+- **默认安全**：CLI 清理默认 dry-run；Web 清理必须二次确认
+- **只移到回收站**：保留原目录结构，写 `manifest.json` + `journal.jsonl`
+- **操作前再校验**：大小、修改时间和 SHA-256 都会重新检查
+- **NAS 友好**：SQLite 增量缓存、分阶段扫描、资源限制、Docker
+
+## 界面预览
+
+<p align="center">
+  <img src="docs/screenshots/scan.png" alt="扫描页面：选择目录、内容类型和模式" width="49%">
+  <img src="docs/screenshots/confirm.png" alt="确认移动到回收站" width="49%">
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/results.png" alt="扫描结果：缩略图、保留项选择和可回收空间" width="100%">
+</p>
+
+## 30 秒上手
+
+### 方式一：Docker（推荐 NAS / 服务器）
 
 ```bash
-# ffmpeg/ffprobe: 视频抽帧
-# libchromaprint-tools: 音频指纹 fpcalc（可选）
-sudo apt-get update
-sudo apt-get install -y ffmpeg libchromaprint-tools
+git clone https://github.com/yejunhui/content-dedup.git
+cd content-dedup
+
+# 把 /volume1/media 换成你的媒体目录
+MEDIA_DIR=/volume1/media docker compose up -d
 ```
 
-Python 依赖（Python >= 3.11）：
+打开 `http://<NAS-IP>:8765/`。
+
+- 媒体目录需要**可写**，Web 清理才能把重复项移动到 `.dedup-trash`
+- 缓存、报告、缩略图保存在 Docker 命名卷 `content-dedup-state` 中
+- 镜像已包含 ffmpeg 和 Chromaprint `fpcalc`
+- 容器内以 UID 1000 运行；如果 NAS 媒体目录属于其他 UID，请调整 compose 的 `user:` 或目录权限
+- 停止：`docker compose down`（不会删除媒体）
+
+> ⚠️ Web 控制台默认没有登录认证。Docker 端口只建议暴露在可信局域网，或使用 VPN / 反向代理认证。
+
+### 方式二：本地 Python + Web 界面
 
 ```bash
-# Debian/Ubuntu 若缺少 venv：sudo apt-get install -y python3-venv
+git clone https://github.com/yejunhui/content-dedup.git
+cd content-dedup
+
 python3 -m venv .venv
 . .venv/bin/activate
-python3 -m pip install -e .
-# 或安装开发依赖
-python3 -m pip install -e ".[dev]"
+pip install -e .
+
+# 可选：视频抽帧/缩略图、音频指纹
+sudo apt-get install -y ffmpeg libchromaprint-tools
+
+# macOS: brew install ffmpeg chromaprint
+# Windows: 安装 ffmpeg，并把 fpcalc 加入 PATH
+
+./start-web.sh
+# 等价于: dedup web --open
 ```
 
-不装 `fpcalc` 也能运行，音频文件会显示为 `unsupported` 并只参与精确去重。
-
-## 快速开始
+默认打开 `http://127.0.0.1:8765/`。只想浏览某个目录：
 
 ```bash
-# 全量：精确 + 结构指纹
-dedup scan /data/media \
-  --types image,video,document \
-  --mode all \
-  --report /data/reports/latest.json
-
-# 只做精确去重，速度最快
-dedup scan /data/media --mode exact --report /data/reports/exact.json
-
-# 大目录先用小样本验证（按遍历顺序取前 N 个，提前停止遍历）
-dedup scan /data/media --limit 500 --types image
-
-# 查看报告（Markdown 输出到终端）
-dedup report --report /data/reports/latest.json
-
-# 清理：默认 dry-run，只打印计划
-dedup apply --report /data/reports/latest.json
-
-# 确认无误后真正移入 trash
-dedup apply --report /data/reports/latest.json --yes
-```
-
-`python -m dedup ...` 与 `dedup ...` 等价。
-
-## 图形界面（推荐普通用户）
-
-不需要记命令，启动本地 Web 控制台后在浏览器里操作：
-
-```bash
-# 打开 http://127.0.0.1:8765/
-dedup web --open
-
-# NAS 上只允许访问媒体目录（推荐）
 dedup web --root /volume1/media --open
 ```
 
-Web 控制台使用 Python 标准库，不需要 Node.js 或额外前端构建。
-
-安装完依赖后，也可以直接运行项目根目录的启动脚本（Windows 双击 `start-web.bat`）：
+### 方式三：命令行
 
 ```bash
-./start-web.sh --root /volume1/media
+# 标准模式：精确 + 相似
+dedup scan /volume1/media \
+  --types image,video,document \
+  --report /volume1/reports/latest.json
+
+# 只要完全重复，速度最快
+dedup scan /volume1/media --mode exact --report /volume1/reports/exact.json
+
+# 查看报告
+dedup report --report /volume1/reports/latest.json
+
+# 清理：默认 dry-run，仅打印计划
+dedup apply --report /volume1/reports/latest.json
+
+# 确认后真正移动到 .dedup-trash
+dedup apply --report /volume1/reports/latest.json --yes
 ```
 
-界面流程：
-
-1. 点“浏览…”选择文件夹，勾选要扫描的内容类型。
-2. 选择“标准模式”（精确 + 相似）或“仅完全重复”。
-3. 开始扫描；页面会显示实时进度，可随时取消。
-4. 在结果页查看缩略图、相似距离和每个文件的大小/时间。
-5. 每组默认保留报告建议的文件；点击其他行的“保留”可更换 keeper。
-6. 勾选要移走的重复文件，核对数量与可回收空间。
-7. 确认后移动到回收站；操作前会再次校验文件是否变化。
-
-其他能力：
-
-- 历史报告：所有 Web 扫描报告保存在报告目录中，可随时重新打开审核。
-- 缓存页：查看增量缓存状态、清理失效缓存。
-- 图片/视频缩略图：服务端按需生成并缓存；文档/文本/音频显示类型图标。
-- 目录限制：`--root /data` 会把浏览、扫描和报告访问限制在该目录下。
-- 默认只监听 `127.0.0.1`。若用 `--host 0.0.0.0` 暴露到局域网，请配合防火墙；当前版本没有登录认证。
+想先体验？生成一组演示文件再扫描：
 
 ```bash
-# 从群晖/局域网其他设备访问（务必设置 --root 和防火墙）
-dedup web --host 0.0.0.0 --port 8765 --root /volume1/media
+python examples/create_demo.py ./demo
+dedup web --root ./demo --open
 ```
 
-Web 模式默认使用：
+## 核心能力
 
-```text
-.dedup/cache.sqlite3     增量缓存
-.dedup/reports/          Web 扫描报告
-.dedup/thumbnails/       缩略图缓存
-```
+| 内容类型 | 精确匹配 | 结构/感知指纹 | 说明 |
+|---|---|---|---|
+| 图片 | SHA-256 | pHash / dHash + RGB 颜色直方图 | 识别缩放、重压缩；颜色差异过大时拒绝 |
+| 视频 | SHA-256 | 抽帧 pHash 序列 + DTW + 颜色直方图 | 识别重编码、分辨率变化；时长差过大不比较 |
+| 音频 | SHA-256 | Chromaprint（`fpcalc`） | 缺 `fpcalc` 时自动降级为仅精确去重 |
+| PDF / Office / ODF / EPUB | SHA-256 | 文本提取 + SimHash | 同内容不同格式导出可匹配 |
+| 纯文本 / 代码 / Markdown | SHA-256 | SimHash + 3-token shingles | 过短文本只做精确匹配 |
+| zip / tar / gz / bz2 / xz | SHA-256 | 内部 `(路径, 大小, SHA-256)` 清单 | 识别重新压缩、重新打包 |
+| 其他二进制 | SHA-256 | — | 只做精确去重，避免误判 |
 
-可用 `--db`、`--reports`、`--thumbs` 覆盖。所有“移动”只会进入 `<扫描根>/.dedup-trash/<时间戳>/`，不会永久删除文件。
+### 它怎么判断“相似”
 
-## 命令说明
+1. **精确层**：所有类型统一 SHA-256 分组，完全相同零误判。
+2. **结构层**：
+   - 图片：32×32 灰度 DCT → 64 位 pHash；颜色直方图二次校验
+   - 视频：按间隔抽帧，每帧 pHash，序列用 DTW 对齐，另加时长和颜色门控
+   - 音频：Chromaprint 原始指纹，在时间轴上平移对齐
+   - 文档/文本：tokenize → unigram + shingle → 64 位 SimHash
+   - 压缩包：解压成员内容哈希 → 排序 → 清单哈希
+3. **索引层**：64 位汉明距离使用分段 banding 索引，先取候选再精确校验。
+4. **聚类层**：星型聚类，keeper 必须与每个重复项直接满足阈值，避免链式误合并。
+5. **语义层**：预留 CLIP / 文本 embedding 接口，本版本未启用。
 
-### `scan`
+## 安全设计
 
-| 参数 | 说明 |
-|---|---|
-| `ROOT` | 扫描根目录 |
-| `--config` | YAML 配置；不传时自动读取当前目录的 `config.yaml` |
-| `--types` | `image,video,audio,document,text,archive,binary` 的子集，默认全部 |
-| `--mode` | `exact`、`fingerprint`、`all`；`all` 当前等同于前两层，语义层启用后才会不同 |
-| `--db` | SQLite 缓存路径，默认 `.dedup/cache.sqlite3` |
-| `--report` | JSON 报告路径（相邻生成 `.md`），默认 `.dedup/reports/latest.json` |
-| `--limit` | 限制处理文件数；按目录/文件名排序的遍历顺序取前 N 个，提前停止遍历 |
-| `--workers` | 并行哈希/指纹线程数；NAS 上建议 1–2 |
-| `--min-size` | 跳过小于 N 字节的文件 |
-| `--follow-symlinks` | 跟随符号链接；apply 会拒绝移动符号链接，仅建议用于分析 |
-| `--refresh` | 忽略缓存，强制重算 |
-| `--no-semantic` | 显式关闭语义层（当前默认关闭） |
+ContentDedup 不是“一键删文件”工具：
 
-### `report`
+- CLI `apply` **默认 dry-run**；Web 必须勾选确认并点击确认按钮
+- 重复项只移动到 `<扫描根>/.dedup-trash/<时间戳>/`，保留原相对路径
+- 每次移动前重新校验文件大小、mtime 和内容 SHA-256；文件变化会自动跳过
+- 每组记录 keeper 与每个重复项的判定依据（精确、pHash 距离、SimHash 距离、音频相似度）
+- 写 `manifest.json` 和逐条 `journal.jsonl`，方便追溯
+- 不提供永久删除接口
+- 建议 NAS 执行前打 Btrfs 快照，并把 trash 放在可回滚卷
 
-渲染保存的 JSON 报告，`--top` 控制展示的组数，`--out` 可写入 Markdown 文件。
+Web 安全：
 
-### `apply`
-
-- **默认 dry-run**，只显示将移动哪些文件；dry-run 只校验存在性/大小/mtime，不做内容哈希。
-- 必须显式 `--yes` 才会移动。
-- 移动前重新校验：文件存在、大小、mtime，以及（默认）SHA-256 内容未变化。校验失败会跳过并要求重新扫描。
-- 移动到 `<root>/.dedup-trash/<timestamp>/`，保留原相对路径；同时写 `manifest.json` 和逐条 `journal.jsonl`。
-- 永不删除文件。
-
-```bash
-# 自定义 trash 目录（建议放在扫描根目录之外，或加入 scan.exclude）
-dedup apply --report report.json --yes --trash /volume1/trash/content-dedup
-
-# 跳过内容哈希校验（不建议；仍会检查 size/mtime）
-dedup apply --report report.json --yes --no-verify
-```
-
-### `cache`
-
-```bash
-dedup cache stats
-dedup cache prune      # 删除已不存在文件的缓存
-dedup cache clear --yes
-```
-
-### `web`
-
-```bash
-dedup web [--host 127.0.0.1] [--port 8765] [--root DIR] [--open]
-```
-
-启动本地 Web 控制台。`--root` 会限制浏览器可浏览/扫描的范围；`--open` 自动打开默认浏览器。详细流程见上文。
-
-## 分层与阈值
-
-### 图片
-
-- pHash：32×32 灰度 DCT，取低频 8×8 生成 64 位指纹。
-- dHash：通过 `image.algorithm: dhash` 切换。
-- 颜色校验：额外保存 4×4×4 RGB 直方图；pHash/dHash 通过后，颜色直方图交集低于 `image.color_threshold` 仍判为不相似。这能避免“同构图不同配色”被误删，但会拒绝强色调滤镜/调色后的版本，可按需调低阈值。
-
-### 视频
-
-- 按 `video.frame_interval` 抽帧；帧数超过 `max_frames` 时自动放大采样间隔，覆盖整段视频。
-- 每帧 pHash，序列用带窗口的 DTW 对齐，平均汉明距离 ≤ `video.phash_threshold` 判为相似。
-- 每帧同时累计 4×4×4 RGB 直方图，颜色相似度低于 `video.color_threshold` 直接拒绝；可避免纯色/静态画面 pHash 全相同导致误判。
-- 时长比例低于 `1 - video.duration_tolerance` 直接拒绝；无法从 ffprobe 获取时长时仅做精确去重。
-- 首尾剪辑、明显插帧可能降低相似度；这是为安全删除做的保守取舍。
-- `max_pair_comparisons` 限制同一批视频的两两比较次数，防止超大视频库退化为不可接受的 O(n²)；达到上限会在报告中告警。
-
-### 音频
-
-- 调用 `fpcalc -json -raw -length N` 获取 Chromaprint 原始指纹。
-- 在 ±`audio.max_shift` 帧内平移对齐，重叠至少 `audio.min_overlap` 帧，位错误率换算为相似度，≥ `audio.min_score` 判为相似。
-- 时长差超过 `audio.duration_tolerance` 直接拒绝。
-- `max_pair_comparisons` 同样用于限制超大音频库的两两比较次数。
-
-### 文档 / 文本
-
-- PDF 用 `pypdf`，DOCX 用 `python-docx`，XLSX 用 `openpyxl`；PPTX/ODF/EPUB 直接解析容器 XML。
-- 文本 token 化后：unigram 权重 1，3-token shingle 权重 2，生成 64 位 SimHash。
-- 汉明距离 ≤ 对应类型的 `simhash_hamming` 判为相似；默认 3。
-- 少于 `min_tokens` 的文档/文本只做精确去重，避免短文本误判。
-- 文本文件超过 `text.max_bytes` 时只做精确去重。
-- 文档提取文本超过 `max_chars`、或 PDF 页数超过 `max_pages` 时只做精确去重，避免只比较前缀造成误判。
-
-### 压缩包
-
-- zip/tar 读取每个成员内容并计算 SHA-256，清单按 `(相对路径, 大小, SHA-256)` 排序后哈希。
-- 单文件 `.gz/.bz2/.xz` 对解压后的内容做哈希。
-- 因此“同内容、不同压缩级别、不同打包顺序”的压缩包会得到相同指纹。
-- 解压总量、条目数、单文件大小都有上限，防止压缩炸弹；超限时只做精确去重。
-- 当前支持 zip / tar / tar.gz / tgz / tar.bz2 / tar.xz / gz / bz2 / xz；7z、rar、zst 等作为普通二进制精确去重。
+- 默认只监听 `127.0.0.1`
+- 使用 `--root /data` 限制可浏览/扫描范围
+- 局域网访问请设置防火墙；当前版本没有登录认证
+- 不要直接暴露到公网
 
 ## 配置
 
@@ -234,7 +190,7 @@ scan:
 image:
   algorithm: phash          # phash | dhash
   phash_threshold: 8        # 0..64
-  color_threshold: 0.85     # 直方图交集
+  color_threshold: 0.85
 
 video:
   frame_interval: 5.0
@@ -246,9 +202,9 @@ video:
 
 audio:
   enabled: true
+  fpcalc: fpcalc
   min_score: 0.9
   duration_tolerance: 0.15
-  max_pair_comparisons: 200000
 
 document:
   simhash_hamming: 3
@@ -273,7 +229,7 @@ storage:
 
 ## 增量缓存
 
-SQLite 表 `files` 保存：
+SQLite 缓存保存：
 
 ```text
 path, size, mtime_ns, adapter, exact_hash,
@@ -281,119 +237,191 @@ fingerprints(JSON), fp_status, fp_error,
 fp_sig, cache_version, updated_at
 ```
 
-- 文件路径、大小、mtime、适配器、算法签名都不变时直接复用。
-- `mode=exact` 只缓存精确哈希；之后跑 `mode=all` 会复用缓存的 SHA-256、只补算指纹。
-- 指纹失败/不支持也会缓存，避免 NAS 每次重复付出代价；用 `--refresh` 强制重试。
-- 外部工具可用性（`fpcalc`、ffmpeg/ffprobe）和影响指纹值的参数都包含在签名中；安装工具或改参数后会自动失效。
-- 文件在扫描过程中发生变化则不会写缓存。
-- SQLite 缓存建议放在本地磁盘或 NAS 的本地卷上；WAL 模式在网络文件系统上可能不可靠。不要同时运行多个 scan 进程写同一个缓存。
+- 文件路径、大小、mtime、适配器、算法签名不变时直接复用
+- `mode=exact` 只缓存精确哈希；之后跑 `mode=all` 会复用 SHA-256、只补指纹
+- 指纹失败/不支持也会缓存，避免 NAS 每次重复付出代价；`--refresh` 强制重试
+- 外部工具可用性（`fpcalc`、ffmpeg/ffprobe）计入签名；安装工具后自动失效
+- SQLite 建议放在本地卷；不要同时运行多个 scan 进程写同一个缓存
 
-## 报告与安全
+## 命令说明
 
-JSON 报告包含：
+### `scan`
 
-- `summary`：组数、重复文件数、可回收空间。
-- `groups`：每组 keeper、重复文件、判定类型、汉明距离/相似度、保留依据。
-- `fingerprint_issues`：按适配器聚合的失败/不支持原因（如缺少 `fpcalc`、文本过短）。
-- `settings`：本次运行的完整配置，便于审计。
+| 参数 | 说明 |
+|---|---|
+| `ROOT` | 扫描根目录 |
+| `--config` | YAML 配置；不传时读取当前目录 `config.yaml` |
+| `--types` | `image,video,audio,document,text,archive,binary` 子集 |
+| `--mode` | `exact` / `fingerprint` / `all` |
+| `--db` | SQLite 缓存路径，默认 `.dedup/cache.sqlite3` |
+| `--report` | JSON 报告路径（相邻生成 `.md`） |
+| `--limit` | 最多处理 N 个文件，遍历到 N 后提前停止 |
+| `--workers` | 并行哈希/指纹线程数，NAS 建议 1–2 |
+| `--min-size` | 跳过小于 N 字节的文件 |
+| `--follow-symlinks` | 跟随符号链接，仅建议用于分析 |
+| `--refresh` | 忽略缓存重算 |
+| `--no-semantic` | 显式关闭语义层（当前默认关闭） |
 
-安全策略：
+### `report` / `apply` / `cache`
 
-- 默认 dry-run。
-- 只移动重复项，绝不移动 keeper。
-- 保留相对路径，写入 manifest/journal。
-- apply 前校验 size/mtime/SHA-256。
-- 压缩包和二进制只做精确去重，不做“相似删除”。
-- NAS 上建议执行前打 Btrfs 快照，并把 trash 放在可回滚的卷上。
+```bash
+dedup report --report reports/latest.json --top 50
+dedup apply  --report reports/latest.json              # dry-run
+dedup apply  --report reports/latest.json --yes        # move to trash
+
+dedup cache stats
+dedup cache prune
+dedup cache clear --yes
+```
+
+`apply` 重新校验内容；`--no-verify` 可跳过内容哈希，但仍检查 size/mtime（不建议）。
+
+### `web`
+
+```bash
+dedup web [--host 127.0.0.1] [--port 8765] [--root DIR] [--open]
+```
+
+Web 模式默认使用：
+
+```text
+.dedup/cache.sqlite3     增量缓存
+.dedup/reports/          扫描报告
+.dedup/thumbnails/       缩略图缓存
+```
+
+可用 `--db`、`--reports`、`--thumbs` 覆盖。
+
+## Docker / NAS
+
+镜像包含：
+
+- Python 3.13
+- ffmpeg / ffprobe
+- Chromaprint `fpcalc`
+- Pillow / numpy / 文档解析依赖
+
+构建并运行：
+
+```bash
+docker build -t content-dedup .
+docker run --rm -p 8765:8765 \
+  -v /volume1/media:/data \
+  -v content-dedup-state:/state \
+  content-dedup
+```
+
+`docker-compose.yml` 使用命名卷保存缓存、报告和缩略图。若需要直接在宿主机查看 JSON/Markdown 报告，可把 `/state` 改成 bind mount：
+
+```yaml
+volumes:
+  - "${MEDIA_DIR:-./media}:/data"
+  - "${STATE_DIR:-./state}:/state"
+```
+
+并确保运行容器内 UID 1000 对 `state/` 和需要清理的媒体目录有写权限：
+
+```bash
+mkdir -p state
+sudo chown -R 1000:1000 state
+```
+
+NAS 建议：
+
+1. 先 `--mode exact` 快速拿到完全重复
+2. 再按类型分批跑结构指纹
+3. 视频/音频单独错峰执行
+4. `--workers 1`，限制 CPU
+5. 执行前打 Btrfs 快照
+6. 大库按目录拆分，避免 `max_pair_comparisons` 上限
+
+## 性能与规模
+
+- 精确哈希：顺序读文件，SHA-256，内存占用低
+- 图片：缩到 32×32 灰度后 DCT；颜色直方图 4×4×4
+- 视频：抽帧后只保留 32×32 RGB，不落盘临时帧
+- 音频：`fpcalc` 默认分析前 120 秒
+- 文档：文本提取有 `max_chars` / `max_pages` 限制，超限只做精确去重
+- 相似索引：banding 候选生成，避免全量 O(n²)
+- 视频/音频：时长门控 + 快速预筛 + 对比较次数上限
+- 增量缓存：重复扫描只处理新增/修改文件
 
 ## 架构
 
 ```text
 src/dedup/
-├── adapters/
-│   ├── base.py          # ContentAdapter 抽象、MatchInfo
-│   ├── image.py         # pHash/dHash + 颜色直方图
-│   ├── video.py         # ffmpeg 抽帧 + pHash 序列 + DTW
-│   ├── audio.py         # fpcalc / Chromaprint
-│   ├── document.py      # PDF/Office/ODF/EPUB 文本提取
-│   ├── text.py          # 文本/代码/标记语言
-│   ├── archive.py       # 内部清单哈希
-│   ├── binary.py        # 兜底
-│   └── textutil.py      # tokenizer、编码检测、SimHash 构建
-├── fingerprints.py      # pHash/dHash/SimHash/DTW/音频比对
-├── index.py             # 分段汉明索引（banding）
-├── pipeline.py          # 枚举、缓存、并发、编排
-├── grouping.py          # 精确桶 + 指纹星型聚类
-├── store.py             # SQLite 增量缓存
-├── report.py            # JSON/Markdown
-├── cleanup.py           # trash 安全移动、按选择清理
-├── config.py            # 配置加载/校验
-├── cli.py
-└── web/                 # 本地 Web 控制台
-    ├── server.py        # HTTP/JSON API
-    ├── jobs.py          # 后台扫描/清理任务
-    ├── thumbnails.py    # 图片/视频缩略图
-    └── static/          # HTML/CSS/JS（无外部 CDN）
+├── adapters/             # 图片/视频/音频/文档/文本/压缩包/二进制
+├── fingerprints.py       # pHash、dHash、SimHash、DTW、音频相似度
+├── index.py              # 分段汉明索引
+├── pipeline.py           # 枚举、缓存、并发、进度、取消
+├── grouping.py           # 精确桶 + 星型聚类
+├── store.py              # SQLite 增量缓存
+├── report.py             # JSON / Markdown 报告
+├── cleanup.py            # 安全移动、按选择清理
+├── config.py             # 配置加载/校验
+├── cli.py                # scan / report / apply / cache / web
+└── web/                  # 本地 Web 控制台
+    ├── server.py         # HTTP + JSON API
+    ├── jobs.py           # 后台扫描/清理任务、目录浏览
+    ├── thumbnails.py     # 图片/视频缩略图
+    └── static/           # HTML/CSS/JS，无 CDN / Node 构建
 ```
 
-指纹索引使用“阈值 + 1 个分段”的 banding：若两个 64 位值的汉明距离 ≤ 阈值，至少一个分段完全相同（鸽巢原理）。先取候选，再用适配器精确校验，避免 O(n²) 全量比较。视频/音频按数量较少且带时长门控，使用排序后的区间扫描。
+更早的方案推演见 [设计笔记](docs/design.md)。
 
-聚类采用 **星型聚类**：keeper 必须与组内每个重复项直接满足阈值，避免 A~B、B~C 但 A 不~C 的链式合并导致误删。
+## 常见问题
 
-## 测试
+**会上传我的文件吗？**  
+不会。所有扫描、指纹、缩略图和清理都在本机完成，没有云服务依赖。
 
-```bash
-python3 -m pip install -e ".[dev]"
-pytest -q
-# 跳过 ffmpeg 集成测试
-pytest -q -m "not integration"
-```
+**会永久删除文件吗？**  
+不会。只移动到 `.dedup-trash`；Web 和 CLI 都不提供永久删除接口。
 
-集成测试会用 ffmpeg 生成小视频并验证重编码后的匹配；音频匹配算法有合成指纹单测，缺少 `fpcalc` 时验证降级行为。Web 测试会启动真实 HTTP 服务，覆盖目录浏览、扫描任务、报告、缩略图和按选择清理。
+**为什么没有发现重复？**  
+确认开启了“标准模式”、勾选了对应内容类型，并检查阈值。短文本（默认少于 20 tokens）、旧版二进制 Office、无文本层扫描 PDF 只做精确去重。
 
-## NAS / 大目录建议
+**和 fdupes / rmlint 有什么区别？**  
+fdupes 等主要做精确重复。ContentDedup 增加了图片/视频/音频/文档/文本的结构指纹、Web 审核界面、回收站与操作前校验。
 
-1. **分阶段跑**：先 `--mode exact` 快速拿到完全重复；再按类型跑结构指纹；音频/视频单独错峰。
-2. **限制并发**：`--workers 1`（默认）或 2；视频抽帧时更高并发会打满 NAS CPU。
-3. **缓存和报告放在本地卷**：SQLite WAL 不建议放在网络文件系统；报告目录也应可写。
-4. **执行前打快照**：Btrfs 快照 + `trash/` 双保险；先看 dry-run 和 Markdown 报告。
-5. **按目录分批**：超大视频库可拆成多个目录分别扫描，避免触发 `max_pair_comparisons`。
+**能在群晖/威联通/NAS 上跑吗？**  
+可以。推荐 Docker；也可以 Python 安装后用 `dedup web --root /volume1/media`，缓存放在本地卷。
 
-示例：
+**如何恢复？**  
+从 `<扫描根>/.dedup-trash/<时间戳>/` 按原相对路径取回。目录下有 `manifest.json` 和 `journal.jsonl`。当前 Web 版本暂未提供一键恢复页面。
 
-```bash
-# 阶段 1：完全重复
-dedup scan /volume1/media --mode exact \
-  --db /volume1/docker/content-dedup/db/cache.sqlite3 \
-  --report /volume1/docker/content-dedup/reports/exact.json
+**支持 Windows / macOS 吗？**  
+支持 Python 3.11+ 的平台；视频需要 ffmpeg，音频指纹需要 Chromaprint `fpcalc`。Web 界面跨平台。
 
-# 阶段 2：图片 + 文档
-dedup scan /volume1/media --types image,document,text,archive \
-  --db /volume1/docker/content-dedup/db/cache.sqlite3 \
-  --report /volume1/docker/content-dedup/reports/docs.json
+**语义向量层呢？**  
+接口和配置已预留，当前版本未实现；`semantic.enabled: true` 会明确报错。
 
-# 阶段 3：视频/音频（低频时段）
-dedup scan /volume1/media --types video,audio --workers 1 \
-  --db /volume1/docker/content-dedup/db/cache.sqlite3 \
-  --report /volume1/docker/content-dedup/reports/video.json
-```
+## Roadmap
 
-后续阶段会命中前序阶段写入的 SQLite 缓存，只补算对应类型的指纹。
+- [x] 精确 + 结构指纹全类型
+- [x] 本地 Web 控制台、缩略图、进度与取消
+- [x] 安全回收站、manifest/journal、操作前校验
+- [x] SQLite 增量缓存
+- [x] Docker / docker-compose 与 CI
+- [ ] 一键恢复回收站页面
+- [ ] Web UI 英文界面 / i18n
+- [ ] 语义向量层（CLIP / 文本 embedding）
+- [ ] 可选 FAISS / HNSW 语义索引
+- [ ] 7z / rar / zst 内部清单，HEIC/AVIF 开箱支持
+- [ ] PyPI 发布与版本化二进制包
 
-## 当前限制
+## 参与贡献
 
-- 语义向量层未实现；`semantic.enabled: true` 会明确报错。
-- 旧版二进制 Office（`.doc/.xls/.ppt`）只做精确去重。
-- PDF/Office 仅提取已有文本层；扫描版 PDF 需要 OCR，当前只做精确去重。
-- HEIC/HEIF/AVIF 需要对应的 Pillow 插件；缺失时只做精确去重。
-- 动图/多页 TIFF 只取第一帧做感知指纹。
-- SVG 按二进制处理，不参与图片 pHash；避免仅文本相似的不同矢量图被误删。
-- 小于 `min_tokens` 的文本/文档只做精确去重。
-- 音频结构匹配依赖系统安装 `fpcalc`；默认只分析前 `audio.length` 秒（120），超长音频或不同段落可能不匹配。
-- 图片颜色校验偏保守，强调色版本可能需要调低 `image.color_threshold`（设为 0 等价于关闭颜色校验）。
-- 视频结构匹配要求 ffprobe 能返回时长；无法获取时长时只做精确去重。
-- 超大视频/音频库会触发 `max_pair_comparisons` 上限并在报告中告警；建议按目录或类型分批扫描。
-- 自定义 trash 目录若位于扫描根目录内，请加入 `scan.exclude`，否则下次扫描会把 trash 内容当作数据；自定义报告/缓存路径同理。
-- Web 控制台默认只监听 `127.0.0.1`，没有登录认证；绑定 `0.0.0.0` 前请确认网络可信并配置防火墙。
-- Web 当前没有“一键恢复回收站”页面；移动后需从 `.dedup-trash` 手动取回。
-- 本版本未包含 Dockerfile/NAS 镜像，`project_readme.md` 第 7 节的 Docker 化可作为下一阶段。
+欢迎 Issue、PR、适配器、文档和真实使用反馈。
+
+- 开发与测试：[CONTRIBUTING.md](CONTRIBUTING.md)
+- 更新记录：[CHANGELOG.md](CHANGELOG.md)
+- 安全问题：[SECURITY.md](SECURITY.md)
+- 行为准则：[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- GitHub Issues：https://github.com/yejunhui/content-dedup/issues
+- Gitee 镜像：https://gitee.com/PharaohMan/content-dedup
+
+如果这个项目对你有帮助，欢迎点一个 ⭐ Star，让更多人发现它。
+
+## License
+
+[MIT](LICENSE) © 2026 yejunhui
