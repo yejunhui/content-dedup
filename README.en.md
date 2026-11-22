@@ -11,6 +11,7 @@
     <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT License"></a>
     <a href="Dockerfile"><img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker ready"></a>
+    <a href="https://github.com/yejunhui/content-dedup/releases"><img src="https://img.shields.io/github/v/release/yejunhui/content-dedup" alt="Latest release"></a>
     <a href="https://gitee.com/PharaohMan/content-dedup"><img src="https://img.shields.io/badge/Gitee-mirror-C71D23?logo=gitee&logoColor=white" alt="Gitee mirror"></a>
   </p>
 
