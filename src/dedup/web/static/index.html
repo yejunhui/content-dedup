@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>ContentDedup · 内容去重</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <button class="brand" id="brand-home" type="button" aria-label="返回首页">
+      <span class="brand-mark">⧉</span>
+      <span class="brand-copy"><strong>ContentDedup</strong><small>多模态内容去重</small></span>
+    </button>
+    <nav class="topnav" aria-label="主导航">
+      <button class="nav-btn active" data-view="scan" type="button">扫描</button>
+      <button class="nav-btn" data-view="history" type="button">历史报告</button>
+      <button class="nav-btn" data-view="cache" type="button">缓存</button>
+    </nav>
+  </header>
+
+  <main class="app">
+    <section id="view-scan" class="view">
+      <div class="hero">
+        <span class="eyebrow">安全、可回滚的内容去重</span>
+        <h1>找出重复文件，<br><em>安全地腾出空间。</em></h1>
+        <p>支持图片、视频、音频、文档、文本和压缩包。先扫描预览，确认后才会把多余文件移到回收站。</p>
+      </div>
+
+      <div class="scan-grid">
+        <div class="card scan-card">
+          <div class="field">
+            <label class="field-label" for="scan-root">要扫描的文件夹</label>
+            <div class="path-row">
+              <input id="scan-root" class="text-input" type="text" autocomplete="off" spellcheck="false" placeholder="例如 /volume1/media 或 D:\\照片">
+              <button id="browse-btn" class="btn ghost" type="button">浏览…</button>
+            </div>
+            <p class="hint" id="allow-root-hint"></p>
+          </div>
+
+          <div class="field">
+            <span class="field-label">扫描内容</span>
+            <div id="type-chips" class="chips" role="group" aria-label="内容类型"></div>
+          </div>
+
+          <div class="field">
+            <span class="field-label">识别模式</span>
+            <div class="segmented" id="mode-group" role="group" aria-label="识别模式">
+              <button type="button" data-mode="all" class="active">标准模式</button>
+              <button type="button" data-mode="exact">仅完全重复</button>
+            </div>
+            <p class="hint" id="mode-hint">找出完全重复和内容相似的文件，推荐日常使用。</p>
+          </div>
+
+          <details class="advanced">
+            <summary>高级设置</summary>
+            <div class="grid-2">
+              <label class="stack-label">并发数
+                <input id="workers" class="text-input" type="number" min="1" max="16" value="1">
+              </label>
+              <label class="stack-label">最多处理文件数
+                <input id="limit" class="text-input" type="number" min="0" placeholder="不限制">
+              </label>
+              <label class="stack-label">最小文件大小（字节）
+                <input id="min-size" class="text-input" type="number" min="0" value="1">
+              </label>
+              <div class="check-stack">
+                <label class="check"><input id="follow-symlinks" type="checkbox"> 跟随符号链接（仅分析）</label>
+                <label class="check"><input id="refresh" type="checkbox"> 忽略缓存，重新计算</label>
+              </div>
+            </div>
+            <p class="hint">普通使用保持默认即可。视频抽帧较耗资源，并发建议 1–2。</p>
+          </details>
+
+          <div class="scan-actions">
+            <button id="start-scan" class="btn primary big" type="button">开始扫描</button>
+            <span class="muted" id="scan-hint">不会修改任何文件</span>
+          </div>
+        </div>
+
+        <aside class="card safety-card">
+          <h2>为什么可以放心？</h2>
+          <ul class="safety-list">
+            <li><span>🔍</span><div><strong>先预览，后操作</strong><p>扫描结果会按组展示，保留哪个文件由你决定。</p></div></li>
+            <li><span>🗑️</span><div><strong>只移到回收站</strong><p>不会永久删除；按原目录结构保存在 <code>.dedup-trash</code>。</p></div></li>
+            <li><span>✅</span><div><strong>操作前再次校验</strong><p>移动前检查大小、修改时间和内容哈希，文件被改动会自动跳过。</p></div></li>
+            <li><span>📝</span><div><strong>完整记录</strong><p>回收站中生成 manifest 和 journal，随时可追溯。</p></div></li>
+          </ul>
+        </aside>
+      </div>
+
+      <div class="card recent-card">
+        <div class="card-head">
+          <div><h2>最近扫描</h2><p class="muted">打开报告继续审核，或重新扫描。</p></div>
+          <button id="refresh-recent" class="btn ghost small" type="button">刷新</button>
+        </div>
+        <div id="recent-list" class="recent-list">
+          <div class="skeleton-line"></div>
+          <div class="skeleton-line short"></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-progress" class="view hidden">
+      <div class="card progress-card">
+        <div class="progress-head">
+          <div>
+            <span class="status-pill" id="progress-kind">扫描</span>
+            <h1 id="progress-title">正在准备…</h1>
+          </div>
+          <button id="cancel-job" class="btn ghost danger" type="button">取消</button>
+        </div>
+        <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+        <div class="progress-meta">
+          <span id="progress-message">正在启动…</span>
+          <span id="progress-count"></span>
+        </div>
+        <p class="current-path" id="progress-current"></p>
+        <div class="progress-tip">扫描过程中可以离开此页面，但不要关闭服务。取消后已处理结果仍会留在缓存中。</div>
+      </div>
+    </section>
+
+    <section id="view-results" class="view hidden">
+      <div class="results-head">
+        <div>
+          <button id="back-scan" class="link" type="button">← 返回扫描</button>
+          <h1>扫描结果</h1>
+          <p class="muted" id="results-root"></p>
+        </div>
+        <div class="results-actions">
+          <button id="rescan" class="btn ghost" type="button">重新扫描</button>
+          <button id="apply-selected" class="btn primary" type="button">移到回收站</button>
+        </div>
+      </div>
+
+      <div id="summary-grid" class="summary-grid"></div>
+      <div id="result-notices" class="notice-stack"></div>
+
+      <div class="card filter-card">
+        <div class="filter-row">
+          <input id="search" class="text-input" type="search" placeholder="搜索文件名或路径…">
+          <select id="filter-kind" class="text-input compact">
+            <option value="">全部类型</option>
+          </select>
+          <label class="check"><input id="show-moved" type="checkbox"> 显示已移动</label>
+          <span class="muted" id="filter-count"></span>
+        </div>
+        <div class="filter-row secondary">
+          <button id="select-all" class="btn ghost small" type="button">选择当前筛选的重复项</button>
+          <button id="clear-all" class="btn ghost small" type="button">清除选择</button>
+          <span class="muted">点击左侧单选按钮可更换保留文件。</span>
+        </div>
+      </div>
+
+      <div id="groups" class="groups"></div>
+      <div id="empty-state" class="empty hidden">
+        <div class="empty-icon">🎉</div>
+        <h2 id="empty-title">没有找到重复文件</h2>
+        <p id="empty-text">可以尝试标准模式、选择更多内容类型，或换一个目录。</p>
+      </div>
+    </section>
+
+    <section id="view-history" class="view hidden">
+      <div class="page-head">
+        <div><h1>历史报告</h1><p class="muted">所有扫描结果保存在服务端报告目录中。</p></div>
+        <button id="history-refresh" class="btn ghost" type="button">刷新</button>
+      </div>
+      <div id="history-list" class="history-list"></div>
+    </section>
+
+    <section id="view-cache" class="view hidden">
+      <div class="page-head">
+        <div><h1>增量缓存</h1><p class="muted">缓存让重复扫描只处理新增或修改过的文件。</p></div>
+        <button id="cache-refresh" class="btn ghost" type="button">刷新</button>
+      </div>
+      <div id="cache-stats" class="summary-grid"></div>
+      <p id="cache-path" class="muted"></p>
+      <div class="card">
+        <h2>维护</h2>
+        <p class="muted">清理已不存在文件的缓存记录，不影响实际文件。清空全部缓存会强制下次重新计算所有指纹。</p>
+        <div class="actions-row">
+          <button id="cache-prune" class="btn ghost" type="button">清理失效缓存</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="selection-bar" class="selection-bar hidden">
+    <div><strong id="selected-count">0</strong> 个文件 · <span id="selected-size">0 B</span></div>
+    <div class="selection-actions">
+      <button id="clear-selection" class="btn ghost small" type="button">清除选择</button>
+      <button id="apply-bottom" class="btn primary" type="button">移到回收站</button>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
