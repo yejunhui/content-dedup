@@ -22,8 +22,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
+          NOTES="docs/releases/${TAG}.md"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists"
+            if [ -f "$NOTES" ]; then
+              gh release edit "$TAG" \
+                --title "ContentDedup $TAG" \
+                --notes-file "$NOTES"
+            else
+              echo "Release $TAG already exists"
+            fi
+          elif [ -f "$NOTES" ]; then
+            gh release create "$TAG" \
+              --title "ContentDedup $TAG" \
+              --notes-file "$NOTES"
           else
             gh release create "$TAG" \
               --title "ContentDedup $TAG" \
