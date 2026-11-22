@@ -7,6 +7,8 @@
 
 语义向量层（CLIP/文本 embedding）只预留配置与接口，本版本未实现。
 
+代码托管：[GitHub](https://github.com/yejunhui/content-dedup) · [Gitee](https://gitee.com/PharaohMan/content-dedup)
+
 ## 能力矩阵
 
 | 类型 | 精确 | 结构指纹 | 说明 |
